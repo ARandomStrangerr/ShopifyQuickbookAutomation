@@ -1,0 +1,7 @@
+api_key.txt
+__pycache__
+a.out
+venv
+Quickbook.db
+*.cvs
+.DS_Store

@@ -1,0 +1,16 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++11",
+      "-I/Users/thanhdo/workplace/lib/rapidcsv",
+      "-o",
+      "a.out",
+      "VendorReportAutomation.cpp"
+    ],
+    "directory": "/Users/thanhdo/workplace/project/Churi",
+    "file": "/Users/thanhdo/workplace/project/Churi/VendorReportAutomation.cpp",
+    "output": "/Users/thanhdo/workplace/project/Churi/a.out"
+  }
+]
