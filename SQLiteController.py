@@ -7,6 +7,7 @@ def initialSetup():
     queries = [
         '''CREATE TABLE IF NOT EXISTS items (
             qbId TEXT PRIMARY KEY,
+            posId TEXT NOT NULL UNIQUE,
             name TEXT NOT NULL UNIQUE
         )''',
         '''CREATE TABLE IF NOT EXISTS vendor (
@@ -23,9 +24,9 @@ def initialSetup():
         _conn.commit();
     return;
 
-def insertItem(qbId, name):
-    query = 'INSERT INTO items (qbId, name) VALUES (?, ?)';
-    _cursor.execute(query, (qbId, name.lower()));
+def insertItem(qbId, posId, name):
+    query = 'INSERT INTO items (qbId, posId, name) VALUES (?, ?, ?)';
+    _cursor.execute(query, (qbId, posId, name.lower()));
     _conn.commit();
     return;
 
@@ -35,8 +36,14 @@ def insertVendor(id, name):
     _conn.commit();
     return;
 
+def queryItemById(id):
+    query = 'SELECT * FROM items WHERE qbId=?';
+    _cursor.execute(query, (id,));
+    returnValue = _cursor.fetchone();
+    return returnValue;
+
 def queryItem(name):
-    query = 'SELECT qbId, name FROM items WHERE name=?';
+    query = 'SELECT qbId, posId, name FROM items WHERE name=?';
     _cursor.execute(query, (name.lower(),));
     returnValue = _cursor.fetchone();
     return returnValue;
@@ -46,3 +53,8 @@ def queryVendor(vendorName):
     _cursor.execute(query, (vendorName.lower(),));
     returnValue = _cursor.fetchone();
     return returnValue;
+
+def updateVendor(qbId, name):
+    query = 'UPDATE items SET name=? WHERE qbId=?';
+    _cursor.execute(query, (name, qbId));
+    _conn.commit();

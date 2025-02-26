@@ -81,6 +81,15 @@ def __authProcess():
         __refreshAccessToken();
     return;
 
+def __makeRequest(method, uri, params, json):
+    header = {
+        "Authorization": f"bearer {Trunk.data['accessToken']}",
+        "Accept": "application/json"
+    };
+    __authProcess();
+    response = requests.request(method=method, url=uri, headers=header, params=params, json=json);
+    return response;
+
 def __prepProductToPush(product: dict):
     itemList: list[dict] = [];
     for variant in product['variants']:
@@ -109,14 +118,17 @@ def __prepProductToPush(product: dict):
     return itemList;
 
 def __pushProduct(product: dict):
-    __authProcess();
-    uri: str = f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/item?minorversion=73';
-    header = {
-        "Authorization": f"bearer {Trunk.data['accessToken']}",
-        "Accept": "application/json"
-    };
-    response = requests.post(url=uri, headers=header,json=product);
+    response = __makeRequest("POST",
+                             f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/item',
+                             {"minorversion": 73},
+                             product);
     return response.json();
+def __getProductSyncToken(id):
+    response = __makeRequest("GET",
+                             f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query',
+                             {'query': f"SELECT SyncToken FROM Item WHERE Id='{id}'"},
+                             {});
+    return response.json()['QueryResponse']['Item'][0]['SyncToken'];
 
 def __prepInvoiceToPush(orderList: list[dict]):
     invoiceList = [];
@@ -194,8 +206,6 @@ def __pushInvoice(invoiceList: list[dict]):
     };
     for invoice in invoiceList:
         response = requests.post(uri, headers=headers, json=invoice);
-        print(invoice);
-        print(response.text); print();
     return;
 
 def __pushVendor(vendor):
@@ -249,6 +259,12 @@ def updateProduct(updateJson):
     response = requests.post(uri, headers=headers, json=updateJson);
     print(response.json());
 
+def updateItem(posData: dict):
+    __authProcess();
+    uri = f'https://quickbooks.api.intuit.com/v3/company/9341453809626652/item?minorversion=75';
+    
+    return;
+
 def downloadClass(start=1, max=50):
     __authProcess();
     uri = f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query';
@@ -262,7 +278,6 @@ def downloadClass(start=1, max=50):
     response = requests.get(url=uri, headers=headers, params=params);
     response = response.json()['QueryResponse']['Class'];
     return response;
-
 
 def pushInvoice(invoiceList):
     __authProcess();

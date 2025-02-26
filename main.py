@@ -19,9 +19,12 @@ def updateInvoices():
         orders, cursor = PoSAutomation.getOrderData(startDate=Trunk.data['lastUpdatedInvoice']);
     except:
         orders, cursor = PoSAutomation.getOrderData();
-    while (cursor): # thy stupid language does not support do-while loop
+    while (True): # thy stupid language does not support do-while loop
         QBAutomation.pushInvoice(orders);
-        orders, cursor = PoSAutomation.getOrderData(cursor=cursor);
+        if (cursor is None):
+            break;
+        else:
+            orders, cursor = PoSAutomation.getOrderData(cursor=cursor);
     lastUpdatedInvoice: str = str(orders[-1]['date']);
     Trunk.data['lastUpdatedInvoice'] = lastUpdatedInvoice;
     Trunk.writeData("api_key.txt");
@@ -43,7 +46,7 @@ def updateProduct():
             insert those x items into SQLite
         record the last update date - time
     """
-    try: # case weh nthe lastUpdateProductTime is in the system
+    try: # case when the lastUpdateProductTime is in the system
         productList, cursor = PoSAutomation.getProductData(startDate=Trunk.data['lastUpdatedProductTime']);
     except: # case when the lastUpdateProductTime is not in the system
         productList, cursor = PoSAutomation.getProductData(startDate='0001-01-01');
@@ -52,25 +55,32 @@ def updateProduct():
         for product in productList: # list of product from PoS
             # prep each product to comply with QB standard
             readyToPushProducts = QBAutomation.__prepProductToPush(product);
-            for prod in readyToPushProducts: # list of varaints of each product
+            for idx, prod in enumerate(readyToPushProducts): # list of varaints of each product
                 # upload an item to QB
                 response = QBAutomation.__pushProduct(prod);
+                print(prod['Name']);
+                posId = product['variants'][idx]['id'];
                 try: # extract the ID of an item if the item is already exsits
                     qbId = response['Fault']['Error'][0]['Detail'].split(":")[1].split("=")[1];
-                    name = prod['Name'];
+                    print(f'Already exsits in QB with ID = {qbId}');
+                    prod['Id'] = qbId;
+                    prod['SyncToken'] = QBAutomation.__getProductSyncToken(qbId);
+                    print('Updated product on QB');
                 except Exception:
                     qbId = response['Item']['Id'];
-                    name = response['Item']['Name'];
-                print(f"product name: {name}");
-                try:
-                    SQLiteController.insertItem(qbId, name);
-                except Exception as e:
-                    print(f"response: {response}");
-                    print(f"SQL record: {SQLiteController.queryItem(name)}");
-                    print(f"Error msg: {e}");
+                    print(f'Created new in QB with ID = {qbId}');
+                # store / update the item in SQLite
+                item = SQLiteController.queryItemById(qbId);
+                if item is not None and item[2] == prod["Name"]:
+                    print("Already exits within local DB");
+                elif item is None:
+                    SQLiteController.insertItem(qbId, posId, prod['Name']);
+                    print('Create new instant in local DB');
+                elif item is not None and item[2] != prod['Name']:
+                    SQLiteController.updateVendor(qbId, prod['Name']);
+                    print('Updated name of the product'); 
                 lastUpdatedItemTime = response['time'];
-                # store the item in SQLite
-                print(response); print();
+                print();
         if (cursor is None): # there is no next page to fetch
             break;
         else: # fetch another batch of items
@@ -96,16 +106,16 @@ def updateVendor():
     time = "";
     for vendor in vendorList:
         response = QBAutomation.__pushVendor(vendor).json();
-        print(vendor);
-        print(response);
         try: # extract the ID of an item if the item is already exsits
             qbId = response['Fault']['Error'][0]['Detail'].split(":")[1].split("=")[1];
+            print(f'Vendor {vendor} : {qbId} already exsits');
         except Exception:
             qbId = response['Class']['Id'];
+            print(f'Create new vendor {vendor} : {qbId}');
         try:
             SQLiteController.insertVendor(qbId, vendor);
         except:
-            print(f"Duplication {qbId} : {vendor}")
+            print(f"{qbId} : {vendor} already inside the local database");
         time = response['time'];
     Trunk.data['lastUpdatedVendorTime'] = time;
     Trunk.writeData("api_key.txt");
@@ -114,5 +124,5 @@ def updateVendor():
 
 SQLiteController.initialSetup();
 #updateVendor();
-#updateProduct();
-updateInvoices();
+updateProduct();
+#updateInvoices();

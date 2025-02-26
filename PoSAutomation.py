@@ -195,7 +195,7 @@ def getProductData(startDate:str | None = None, cursor: str | None = None, limit
         extractedProduct['variants']= [];
         for variant in product['variants']['edges']:
             variant = variant["node"];
-            extractedVariant = {}
+            extractedVariant = {};
             extractedVariant["id"] = variant['id'];
             extractedVariant["title"] = variant["title"];
             extractedVariant["price"] = variant["price"];
@@ -221,6 +221,7 @@ def getVendorName(startDate: str | None = None,cursor:str | None = None, limit=5
             products({queryCondition}) {{
                 edges {{
                     node {{
+                        id
                         vendor
                     }}
                 }}
@@ -230,7 +231,7 @@ def getVendorName(startDate: str | None = None,cursor:str | None = None, limit=5
                 }}
             }}
         }}''';
-    m = {};
+    m = {};   
     response = __makeRequest(query).json();
     if (response['data']['products']['pageInfo']['hasNextPage']):
         cursor = response['data']['products']['pageInfo']['endCursor'];
@@ -239,23 +240,3 @@ def getVendorName(startDate: str | None = None,cursor:str | None = None, limit=5
     for res in response['data']['products']['edges']:
         m[res['node']['vendor']] = 0;
     return list(m.keys()), cursor;
-
-def getStockChange():
-    query: str = '''
-        query {
-            inventoryItems (first: 5, query: "updated_at:>'2024-02-16T00:00:00") {
-                edges {
-                    node {
-                        
-                    }
-                }
-                pageInfo {
-                    hasNextPage
-                    endCursor
-                }
-            }
-        }
-    '''
-    response = __makeRequest(query).json();
-    print(response);
-
