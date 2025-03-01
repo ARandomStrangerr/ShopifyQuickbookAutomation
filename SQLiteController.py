@@ -18,6 +18,10 @@ def initialSetup():
             qbId TEXT PRIMARY KEY,
             posId TEXT NOT NULL,
             name TEXT NOT NULL
+        )''',
+        ''' CREATE TABLE IF NOT EXISTS chartOfAccount(
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE
         )'''];
     for query in queries:
         _cursor.execute(query);
@@ -35,6 +39,17 @@ def insertVendor(id, name):
     _cursor.execute(query, (id, name.lower()));
     _conn.commit();
     return;
+
+def insertAccount(id, name):
+    query = 'INSERT INTO chartOfAccount (id, name) VALUES (?, ?)'
+    _cursor.execute(query, (id, name));
+    _conn.commit();
+    return;
+
+def queryAccountByName(name):
+    query = "SELECT * FROM chartOfAccount WHERE name=?";
+    _cursor.execute(query, (name,));
+    return _cursor.fetchone();
 
 def queryItemById(id):
     query = 'SELECT * FROM items WHERE qbId=?';
@@ -57,4 +72,9 @@ def queryVendor(vendorName):
 def updateVendor(qbId, name):
     query = 'UPDATE items SET name=? WHERE qbId=?';
     _cursor.execute(query, (name, qbId));
+    _conn.commit();
+
+def updateChartOfAccount(id, name):
+    query = 'UPDATE chartOfAccount SET name=? WHERE id=?';
+    _cursor.execute(query, (name, id));
     _conn.commit();
