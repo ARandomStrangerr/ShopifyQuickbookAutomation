@@ -90,6 +90,12 @@ def __makeRequest(method, uri, params, json):
     response = requests.request(method=method, url=uri, headers=header, params=params, json=json);
     return response;
 
+def __getChartOfAccount():
+    return __makeRequest("GET", 
+                         f"https://quickbooks.api.intuit.com/v3/company/{Trunk.data['qbCompanyId']}/query", 
+                         {"query": "SELECT Name, Id FROM Account"}, 
+                         {}).json()['QueryResponse']['Account'];
+
 def __prepProductToPush(product: dict):
     itemList: list[dict] = [];
     for variant in product['variants']:
@@ -123,12 +129,30 @@ def __pushProduct(product: dict):
                              {"minorversion": 73},
                              product);
     return response.json();
+
 def __getProductSyncToken(id):
     response = __makeRequest("GET",
                              f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query',
                              {'query': f"SELECT SyncToken FROM Item WHERE Id='{id}'"},
                              {});
     return response.json()['QueryResponse']['Item'][0]['SyncToken'];
+
+def __prep(order: dict) -> dict:
+    invoice = {
+        'DocNumber': order['id'],
+        'TxnDate':  order['date'],
+        'DueDate': order['date'],
+        'GlobalTaxCalculation': 'TaxExcluded',
+        'CustomerRef': {
+            'value': 2
+        },
+        'DepartmentRef': {
+            'value': '2',
+            'name': 'CHURI - New Westminster'
+        },
+        'Line': []
+    };
+    return invoice;
 
 def __prepInvoiceToPush(orderList: list[dict]):
     invoiceList = [];
@@ -157,8 +181,6 @@ def __prepInvoiceToPush(orderList: list[dict]):
             if (itemQuery):
                 vendorQuery = SQLiteController.queryVendor(item['vendor']);
             else:
-#                itemQuery = SQLiteController.queryItem("Custom Sale");
-#                vendorQuery = SQLiteController.queryVendor("Custom Sale");
                 itemQuery = ["1437", "Custom Sale"];
                 vendorQuery = ["886379", "Custom Sale"];
                 lineItem['Description'] = item['name'];
@@ -199,13 +221,9 @@ def __prepInvoiceToPush(orderList: list[dict]):
     return invoiceList;
 
 def __pushInvoice(invoiceList: list[dict]):
-    uri: str = f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/invoice';
-    headers = {
-        "Authorization": f"bearer {Trunk.data['accessToken']}",
-        "Accept": "application/json"
-    };
     for invoice in invoiceList:
-        response = requests.post(uri, headers=headers, json=invoice);
+        response = __makeRequest("POST", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/invoice',{}, invoice);
+        print(response.json());
     return;
 
 def __pushVendor(vendor):
