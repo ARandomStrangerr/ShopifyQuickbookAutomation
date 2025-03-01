@@ -122,7 +122,19 @@ def updateVendor():
     print(f"Finish updateing vendor till {Trunk.data['lastUpdatedVendorTime']}");
     return;
 
+# update the Chart of account from quickbook with locak database
+def updateChartOfAccount():
+    for account in QBAutomation.__getChartOfAccount():
+        try:
+            SQLiteController.insertAccount(account['Id'], account['Name']);
+            print(f'{account["Id"]} - {account["Name"]} inserted into local DB');
+        except:
+            SQLiteController.updateChartOfAccount(account['Id'], account['Name']);
+            print(f'{account["Id"]} - {account["Name"]} is updated');
+    return;
+
 SQLiteController.initialSetup();
+updateChartOfAccount();
 #updateVendor();
-updateProduct();
+#updateProduct();
 #updateInvoices();
