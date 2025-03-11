@@ -3,5 +3,5 @@ __pycache__
 a.out
 venv
 Quickbook.db
-*.cvs
+*.csv
 .DS_Store

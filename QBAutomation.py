@@ -91,9 +91,9 @@ def __makeRequest(method, uri, params, json):
     return response;
 
 def __getChartOfAccount():
-    return __makeRequest("GET", 
-                         f"https://quickbooks.api.intuit.com/v3/company/{Trunk.data['qbCompanyId']}/query", 
-                         {"query": "SELECT Name, Id FROM Account"}, 
+    return __makeRequest("GET",
+                         f"https://quickbooks.api.intuit.com/v3/company/{Trunk.data['qbCompanyId']}/query",
+                         {"query": "SELECT Name, Id FROM Account"},
                          {}).json()['QueryResponse']['Account'];
 
 def __prepProductToPush(product: dict):
@@ -137,94 +137,77 @@ def __getProductSyncToken(id):
                              {});
     return response.json()['QueryResponse']['Item'][0]['SyncToken'];
 
-def __prep(order: dict) -> dict:
-    invoice = {
-        'DocNumber': order['id'],
-        'TxnDate':  order['date'],
-        'DueDate': order['date'],
-        'GlobalTaxCalculation': 'TaxExcluded',
-        'CustomerRef': {
-            'value': 2
-        },
-        'DepartmentRef': {
-            'value': '2',
-            'name': 'CHURI - New Westminster'
-        },
-        'Line': []
-    };
-    return invoice;
+def __prepInvoiceToPush(order):
+    # declare general information of an invoice
+    prepOrder = {};
+    prepOrder['DocNumber'] = order['id'];
+    prepOrder['TxnDate'] = order['date'];
+    prepOrder['DueDate'] = order['date'];
+    prepOrder['GlobalTaxCalculation'] = 'TaxExcluded';
+    prepOrder['CustomerRef'] = {};
+    prepOrder['CustomerRef']['value'] = 2;
+    prepOrder['DepartmentRef'] = {};
+    try:
+        if (order['location'] == "Churi Newwest"):
+            prepOrder['DepartmentRef']["value"] = '2';
+            prepOrder['DepartmentRef']["name"] = 'CHURI - New Westminster';
+        if (order['location'] == "Churi Lougheed"):
+            prepOrder['DepartmentRef']["value"] = '3';
+            prepOrder['DepartmentRef']["name"] = 'CHURI - Lougheed';
+    except:
+        prepOrder['DepartmentRef']['name'] = "Online";
+    prepOrder['Line'] = [];
+    # declare each item of the invoice
+    for item in order['item']:
+        totalTaxRate = 0;
+        lineItem = {};
+        itemQuery = SQLiteController.queryItem(item['name']);
+        if (itemQuery):
+            vendorQuery = SQLiteController.queryVendor(item['vendor']);
+        else:
+            itemQuery = ["1437", "Custom Sale"];
+            vendorQuery = ["886379", "Custom Sale"];
+            lineItem['Description'] = item['name'];
+        lineItem['DetailType'] = 'SalesItemLineDetail';
+        lineItem['SalesItemLineDetail'] = {};
+        lineItem['SalesItemLineDetail']['ItemRef'] = {};
+        lineItem['SalesItemLineDetail']['ItemRef']['value'] = itemQuery[0];
+        lineItem['SalesItemLineDetail']['ItemRef']['name'] = itemQuery[1];
+        lineItem['SalesItemLineDetail']['ClassRef'] = {};
+        lineItem['SalesItemLineDetail']['ClassRef']['value'] = vendorQuery[0];
+        lineItem['SalesItemLineDetail']['ClassRef']['name'] = vendorQuery[1];
+        lineItem['SalesItemLineDetail']['Qty'] = item['quantity'];
+        lineItem['Amount'] = float(item['originalPrice']) * int(item['quantity']);
+        lineItem['SalesItemLineDetail']['TaxCodeRef'] = {};
+        for tax in item['tax']:
+            totalTaxRate += float(tax['rate']);
+        if totalTaxRate == 0:
+            lineItem['SalesItemLineDetail']['TaxCodeRef']['value'] = 3;
+        elif totalTaxRate - 0.05 < 0.01 :
+            lineItem['SalesItemLineDetail']['TaxCodeRef']['value'] = 4;
+        elif totalTaxRate - 0.07 < 0.01:
+            lineItem['SalesItemLineDetail']['TaxCodeRef']['value'] = 10;
+        elif totalTaxRate - 0.12 < 0.01:
+            lineItem['SalesItemLineDetail']['TaxCodeRef']['value'] = 8;
+        prepOrder['Line'].append(lineItem);
+    # declare discount of an invoice
+    discount = float(order['discount'][0]);
+    if (discount!= 0.0):
+        discountLine = {};
+        discountLine['DetailType'] = 'DiscountLineDetail';
+        discountLine['DiscountLineDetail'] = {};
+        discountLine['DiscountLineDetail']['DiscountAccountRef'] = {};
+        discountLine['DiscountLineDetail']['DiscountAccountRef']['value'] = "1150040008";
+        discountLine['DiscountLineDetail']['DiscountAccountRef']['name'] = "Discount";
+        discountLine['Amount'] = str(discount);
+        prepOrder['Line'].append(discountLine);
+    return prepOrder;
 
-def __prepInvoiceToPush(orderList: list[dict]):
-    invoiceList = [];
-    for order in orderList:
-        # declare general information of an invoice
-        prepOrder = {};
-        prepOrder['DocNumber'] = order['id'];
-        prepOrder['TxnDate'] = order['date'];
-        prepOrder['DueDate'] = order['date'];
-        prepOrder['GlobalTaxCalculation'] = 'TaxExcluded';
-        prepOrder['CustomerRef'] = {};
-        prepOrder['CustomerRef']['value'] = 2;
-        prepOrder['DepartmentRef'] = {};
-        try:
-            if (order['location'] == "Churi"):
-                prepOrder['DepartmentRef']["value"] = '2';
-                prepOrder['DepartmentRef']["name"] = 'CHURI - New Westminster';
-        except:
-            prepOrder['DepartmentRef']['name'] = "Online";
-        prepOrder['Line'] = [];
-        # declare each item of the invoice
-        for item in order['item']:
-            totalTaxRate = 0;
-            lineItem = {};
-            itemQuery = SQLiteController.queryItem(item['name']);
-            if (itemQuery):
-                vendorQuery = SQLiteController.queryVendor(item['vendor']);
-            else:
-                itemQuery = ["1437", "Custom Sale"];
-                vendorQuery = ["886379", "Custom Sale"];
-                lineItem['Description'] = item['name'];
-            lineItem['DetailType'] = 'SalesItemLineDetail';
-            lineItem['SalesItemLineDetail'] = {};
-            lineItem['SalesItemLineDetail']['ItemRef'] = {};
-            lineItem['SalesItemLineDetail']['ItemRef']['value'] = itemQuery[0];
-            lineItem['SalesItemLineDetail']['ItemRef']['name'] = itemQuery[1];
-            lineItem['SalesItemLineDetail']['ClassRef'] = {};
-            lineItem['SalesItemLineDetail']['ClassRef']['value'] = vendorQuery[0];
-            lineItem['SalesItemLineDetail']['ClassRef']['name'] = vendorQuery[1];
-            lineItem['SalesItemLineDetail']['Qty'] = item['quantity'];
-            lineItem['Amount'] = float(item['originalPrice']) * int(item['quantity']);
-            lineItem['SalesItemLineDetail']['TaxCodeRef'] = {};
-            for tax in item['tax']:
-                totalTaxRate += float(tax['rate']);
-            if totalTaxRate == 0:
-                lineItem['SalesItemLineDetail']['TaxCodeRef']['value'] = 3;
-            elif totalTaxRate - 0.05 < 0.01 :
-                lineItem['SalesItemLineDetail']['TaxCodeRef']['value'] = 4;
-            elif totalTaxRate - 0.07 < 0.01:
-                lineItem['SalesItemLineDetail']['TaxCodeRef']['value'] = 10;
-            elif totalTaxRate - 0.12 < 0.01:
-                lineItem['SalesItemLineDetail']['TaxCodeRef']['value'] = 8;
-            prepOrder['Line'].append(lineItem);
-        # declare discount of an invoice
-        discount = float(order['discount'][0]);
-        if (discount!= 0.0):
-            discountLine = {};
-            discountLine['DetailType'] = 'DiscountLineDetail';
-            discountLine['DiscountLineDetail'] = {};
-            discountLine['DiscountLineDetail']['DiscountAccountRef'] = {};
-            discountLine['DiscountLineDetail']['DiscountAccountRef']['value'] = "1150040008";
-            discountLine['DiscountLineDetail']['DiscountAccountRef']['name'] = "Discount";
-            discountLine['Amount'] = str(discount);
-            prepOrder['Line'].append(discountLine);
-        invoiceList.append(prepOrder);
-    return invoiceList;
+def __pushInvoice(invoice):
+    return __makeRequest("POST", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/invoice',{}, invoice).json();
 
-def __pushInvoice(invoiceList: list[dict]):
-    for invoice in invoiceList:
-        response = __makeRequest("POST", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/invoice',{}, invoice);
-        print(response.json());
-    return;
+def __getLocations():
+    return __makeRequest("GET", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query', {'query': 'SELECT * FROM Department'}, {}).json();
 
 def __pushVendor(vendor):
     __authProcess();
@@ -278,9 +261,6 @@ def updateProduct(updateJson):
     print(response.json());
 
 def updateItem(posData: dict):
-    __authProcess();
-    uri = f'https://quickbooks.api.intuit.com/v3/company/9341453809626652/item?minorversion=75';
-    
     return;
 
 def downloadClass(start=1, max=50):

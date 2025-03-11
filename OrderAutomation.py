@@ -67,6 +67,7 @@ def updateProduct():
                     prod['SyncToken'] = QBAutomation.__getProductSyncToken(qbId);
                     print('Updated product on QB');
                 except Exception:
+                    print(response);
                     qbId = response['Item']['Id'];
                     print(f'Created new in QB with ID = {qbId}');
                 # store / update the item in SQLite
@@ -108,33 +109,59 @@ def updateVendor():
         response = QBAutomation.__pushVendor(vendor).json();
         try: # extract the ID of an item if the item is already exsits
             qbId = response['Fault']['Error'][0]['Detail'].split(":")[1].split("=")[1];
-            print(f'Vendor {vendor} : {qbId} already exsits');
+            print(f'{qbId} - {vendor}\nalready exsits');
         except Exception:
             qbId = response['Class']['Id'];
-            print(f'Create new vendor {vendor} : {qbId}');
+            print(f'{qbId} - {vendor}\ncreated');
         try:
             SQLiteController.insertVendor(qbId, vendor);
         except:
-            print(f"{qbId} : {vendor} already inside the local database");
+            print(f'already inside the local database');
+        print();
         time = response['time'];
     Trunk.data['lastUpdatedVendorTime'] = time;
     Trunk.writeData("api_key.txt");
     print(f"Finish updateing vendor till {Trunk.data['lastUpdatedVendorTime']}");
     return;
 
-# update the Chart of account from quickbook with locak database
+# update the Chart of account from quickbook with local database
 def updateChartOfAccount():
     for account in QBAutomation.__getChartOfAccount():
+        print(f'{account["Id"]} - {account["Name"]}')
         try:
             SQLiteController.insertAccount(account['Id'], account['Name']);
-            print(f'{account["Id"]} - {account["Name"]} inserted into local DB');
+            print('inserted into local DB');
         except:
             SQLiteController.updateChartOfAccount(account['Id'], account['Name']);
-            print(f'{account["Id"]} - {account["Name"]} is updated');
+            print('updated');
+        print();
     return;
 
+def createOrUpdateInvoice():
+    try:
+        orders, cursor = PoSAutomation.getOrderData(startDate=Trunk.data['lastUpdatedInvoice']);
+    except Exception:
+        orders, cursor = PoSAutomation.getOrderData(startDate="2025-03-01");
+    while (True):
+        for order in orders:
+            invoice = QBAutomation.__prepInvoiceToPush(order);
+            response = QBAutomation.__pushInvoice(invoice);
+            print(response);
+        if cursor is not None:
+            orders, cursor = PoSAutomation.getOrderData(cursor=cursor);
+        else:
+            break;
+    lastUpdatedInvoice: str = str(orders[-1]['date']);
+    Trunk.data['lastUpdatedInvoice'] = lastUpdatedInvoice;
+    Trunk.writeData("api_key.txt");
+    return;
+
+def getLocation():
+    print(QBAutomation.__getLocations());
+
 SQLiteController.initialSetup();
-updateChartOfAccount();
+#updateChartOfAccount();
 #updateVendor();
-#updateProduct();
-#updateInvoices();
+updateProduct();
+createOrUpdateInvoice();
+#getLocation();
