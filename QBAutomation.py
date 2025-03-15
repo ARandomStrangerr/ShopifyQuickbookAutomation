@@ -7,6 +7,10 @@ import time;
 import SQLiteController;
 
 def __openOAuth():
+    """
+    Step 1 of OAuth.
+    Open the window for user to login
+    """
     redirectUri = "https://"+Trunk.data['redirectUri']+"/";
     state = Trunk.data['state'];
     authroizationUrl = f"https://appcenter.intuit.com/connect/oauth2" \
@@ -19,6 +23,10 @@ def __openOAuth():
     return;
 
 def __getCode():
+    """
+    Step 2 of OAuth:
+    accept the incoming connection and read the code.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as soc:
         soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1);
         soc.bind(('localhost', 8000));
@@ -31,6 +39,10 @@ def __getCode():
     return data;
 
 def __exchangeCodeForToken(code: str):
+    """
+    Step 3 of Oauth:
+    exchange the code for access + refresh token, store access token, refresh token, and the expired time.
+    """
     redirectUri = "https://"+Trunk.data['redirectUri']+"/";
     uri = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
     headers = {
@@ -51,6 +63,9 @@ def __exchangeCodeForToken(code: str):
     return;
 
 def __refreshAccessToken():
+    """
+    If access token is expired and refresh token is not, call this fuction
+    """
     uri = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -69,6 +84,9 @@ def __refreshAccessToken():
     return;
 
 def __authProcess():
+    """
+    Join process of all the authentication into one easy function call
+    """
     currentTime = time.time();
     if ("accessToken" not in Trunk.data.keys()
         or currentTime > float(Trunk.data['accessTokenExpiration'])
@@ -82,6 +100,16 @@ def __authProcess():
     return;
 
 def __makeRequest(method, uri, params, json):
+    """
+    Use this function to make a request, purpose is not to create header object multiple times.
+    @PARAMS:
+    method - str: the type of method to use(i.e 'post', 'get', etc).
+    uri - str: the end point to connect to.
+    prams - parameters to join with the uri
+    json - body of the payload;
+    @RETURN:
+    return the response from the request.
+    """
     header = {
         "Authorization": f"bearer {Trunk.data['accessToken']}",
         "Accept": "application/json"
@@ -91,12 +119,27 @@ def __makeRequest(method, uri, params, json):
     return response;
 
 def __getChartOfAccount():
+    """
+    Get all the viable chart of accounts on the account
+
+    @RETURN
+    list chart of accounts from QB.
+    """
     return __makeRequest("GET",
                          f"https://quickbooks.api.intuit.com/v3/company/{Trunk.data['qbCompanyId']}/query",
                          {"query": "SELECT Name, Id FROM Account"},
                          {}).json()['QueryResponse']['Account'];
 
 def __prepProductToPush(product: dict):
+    """
+    given a product with its variants.
+    split each variants into its own individual product and return under the name <item> - <variant>.
+    the format complies with Quickbook API
+    @PARAMS:
+    product - dict: an from pos with variants
+    @RETURN:
+    list[dict]: a list of items.
+    """
     itemList: list[dict] = [];
     for variant in product['variants']:
         name:str = product["title"] + ("" if variant["title"] == 'Default Title' else f" - {variant['title']}");
@@ -124,6 +167,9 @@ def __prepProductToPush(product: dict):
     return itemList;
 
 def __pushProduct(product: dict):
+    """
+    upload the product to Quickbook API.
+    """
     response = __makeRequest("POST",
                              f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/item',
                              {"minorversion": 73},
@@ -131,6 +177,9 @@ def __pushProduct(product: dict):
     return response.json();
 
 def __getProductSyncToken(id):
+    """
+    get the sync token so that product can be be upload.
+    """
     response = __makeRequest("GET",
                              f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query',
                              {'query': f"SELECT SyncToken FROM Item WHERE Id='{id}'"},
@@ -138,6 +187,9 @@ def __getProductSyncToken(id):
     return response.json()['QueryResponse']['Item'][0]['SyncToken'];
 
 def __prepInvoiceToPush(order):
+    """
+    prepare an order to complies with Quickbook API order to push
+    """
     # declare general information of an invoice
     prepOrder = {};
     prepOrder['DocNumber'] = order['id'];
@@ -204,37 +256,22 @@ def __prepInvoiceToPush(order):
     return prepOrder;
 
 def __pushInvoice(invoice):
+    """
+    send the given invoice to QB API
+    """
     return __makeRequest("POST", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/invoice',{}, invoice).json();
 
 def __getLocations():
+    '''
+    get the list of location form quickbook
+    '''
     return __makeRequest("GET", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query', {'query': 'SELECT * FROM Department'}, {}).json();
 
 def __pushVendor(vendor):
-    __authProcess();
-    uri = f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/class?minorversion=40';
-    headers = {
-        "Authorization": f"bearer {Trunk.data['accessToken']}",
-        "Accept": "application/json"
-    };
-    jsonBody = {
-        "Name": vendor
-    };
-    response = requests.post(uri, headers=headers, json=jsonBody);
-    return response;
-
-def getAccountInfo():
-    __authProcess();
-    uri = f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query';
-    headers = {
-        "Authorization": f"bearer {Trunk.data['accessToken']}",
-        "Accept": "application/json"
-    };
-    params = {
-        "query": "SELECT * FROM Account"
-    }
-    response = requests.get(url=uri, headers=headers, params=params);
-    print(response.text);
-    return;
+    '''
+    create vendor for quickbook
+    '''
+    return __makeRequest("POST", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/class', {'minorversion': 40}, {"Name": vendor});
 
 def downloadProduct(start=1, max=50):
     __authProcess();

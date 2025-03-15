@@ -1,3 +1,4 @@
+from requests import request
 import Trunk;
 import PoSAutomation;
 import QBAutomation;
@@ -57,29 +58,37 @@ def updateProduct():
             readyToPushProducts = QBAutomation.__prepProductToPush(product);
             for idx, prod in enumerate(readyToPushProducts): # list of varaints of each product
                 # upload an item to QB
-                response = QBAutomation.__pushProduct(prod);
                 print(prod['Name']);
                 posId = product['variants'][idx]['id'];
-                try: # extract the ID of an item if the item is already exsits
-                    qbId = response['Fault']['Error'][0]['Detail'].split(":")[1].split("=")[1];
-                    print(f'Already exsits in QB with ID = {qbId}');
-                    prod['Id'] = qbId;
-                    prod['SyncToken'] = QBAutomation.__getProductSyncToken(qbId);
-                    print('Updated product on QB');
-                except Exception:
-                    print(response);
-                    qbId = response['Item']['Id'];
-                    print(f'Created new in QB with ID = {qbId}');
-                # store / update the item in SQLite
-                item = SQLiteController.queryItemById(qbId);
-                if item is not None and item[2] == prod["Name"]:
-                    print("Already exits within local DB");
-                elif item is None:
-                    SQLiteController.insertItem(qbId, posId, prod['Name']);
-                    print('Create new instant in local DB');
-                elif item is not None and item[2] != prod['Name']:
-                    SQLiteController.updateVendor(qbId, prod['Name']);
-                    print('Updated name of the product'); 
+                localItem = SQLiteController.queryItemByPosId(posId);
+                if localItem is None: # if the item is not found, then create a new item
+                    response = QBAutomation.__pushProduct(prod);
+                    try:
+                        qbId = response['Item']['Id'];
+                        print(f'Create new QB with ID = {qbId}');
+                        SQLiteController.insertItem(qbId, posId, prod['Name']);
+                        print('Create item in local database');
+                    except: # there is a chance that the db is deleted and the item is already on QB
+                        # the pit fall here is when the item needed to be update but there is no local DB as reference, hence we upload a new item.
+                        qbId = response['Fault']['Error'][0]['Detail'].split(":")[1].split("=")[1];
+                        print(f'Already exsits in QB with ID = {qbId}, but not inside local DB');
+                        # make an attemp to update the item incase change;
+                        prod['Id'] = qbId;
+                        prod['SyncToken'] = QBAutomation.__getProductSyncToken(qbId);
+                        print('Updated product on QB');
+                        SQLiteController.updateItem(qbId, prod['Name']);
+                        print('Updated item on local BD');
+                else: # if the item is found, then update the item in case something changes
+                    # why do this?
+                    # i am not going to waste the memory on my laptop for insiginificant down time in query.
+                    # We pay QB top money and their server better works.
+                    # If i store everything on my laptop, then I simply don't need QB
+                    print("product is inside local DB");
+                    prod['Id'] = localItem[0];
+                    response = QBAutomation.__pushProduct(prod);
+                    print("Updated product on QB");
+                    SQLiteController.updateItem(localItem[0], prod['Name']);
+                    print('Updated item on local BD')
                 lastUpdatedItemTime = response['time'];
                 print();
         if (cursor is None): # there is no next page to fetch
@@ -146,14 +155,17 @@ def createOrUpdateInvoice():
         for order in orders:
             invoice = QBAutomation.__prepInvoiceToPush(order);
             response = QBAutomation.__pushInvoice(invoice);
-            print(response);
+            print("Successfully create invoice {response['Invoice']['Id']}");
         if cursor is not None:
             orders, cursor = PoSAutomation.getOrderData(cursor=cursor);
         else:
             break;
-    lastUpdatedInvoice: str = str(orders[-1]['date']);
-    Trunk.data['lastUpdatedInvoice'] = lastUpdatedInvoice;
-    Trunk.writeData("api_key.txt");
+    try:
+        lastUpdatedInvoice: str = str(orders[-1]['date']);
+        Trunk.data['lastUpdatedInvoice'] = lastUpdatedInvoice;
+        Trunk.writeData("api_key.txt");
+    except:
+        print("Up to date invoice");
     return;
 
 def getLocation():
@@ -162,6 +174,6 @@ def getLocation():
 SQLiteController.initialSetup();
 #updateChartOfAccount();
 #updateVendor();
-updateProduct();
+#updateProduct();
 createOrUpdateInvoice();
 #getLocation();

@@ -51,9 +51,15 @@ def queryAccountByName(name):
     _cursor.execute(query, (name,));
     return _cursor.fetchone();
 
-def queryItemById(id):
+def queryItemByQbId(qbId):
     query = 'SELECT * FROM items WHERE qbId=?';
-    _cursor.execute(query, (id,));
+    _cursor.execute(query, (qbId,));
+    returnValue = _cursor.fetchone();
+    return returnValue;
+
+def queryItemByPosId(posId):
+    query = 'SELECT * FROM items WHERE posId=?';
+    _cursor.execute(query, (posId,));
     returnValue = _cursor.fetchone();
     return returnValue;
 
@@ -69,7 +75,7 @@ def queryVendor(vendorName):
     returnValue = _cursor.fetchone();
     return returnValue;
 
-def updateVendor(qbId, name):
+def updateItem(qbId, name):
     query = 'UPDATE items SET name=? WHERE qbId=?';
     _cursor.execute(query, (name, qbId));
     _conn.commit();
