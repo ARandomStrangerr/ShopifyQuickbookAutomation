@@ -155,7 +155,10 @@ def createOrUpdateInvoice():
         for order in orders:
             invoice = QBAutomation.__prepInvoiceToPush(order);
             response = QBAutomation.__pushInvoice(invoice);
-            print("Successfully create invoice {response['Invoice']['Id']}");
+            try:
+                print(f"Successfully create invoice {response['Invoice']['Id']}");
+            except Exception:
+                print(f'Invoice {response["Fault"]["Error"][0]["Detail"].split("=")[-1]} is already created');
         if cursor is not None:
             orders, cursor = PoSAutomation.getOrderData(cursor=cursor);
         else:
@@ -171,9 +174,33 @@ def createOrUpdateInvoice():
 def getLocation():
     print(QBAutomation.__getLocations());
 
+def cleanupCustomSale():
+    maxResult = 5; # the max number of invoice to fetch
+    startPos = 0; # current starting position when fetch
+    account = SQLiteController.queryAccountByName("Income Sale");
+    invoices = QBAutomation.__getInvoice(maxResult, startPos).json()['QueryResponse']['Invoice']; # the first 5 invoices
+    while (True):
+        for invoice in invoices: # loop thorugh each invoice
+            for index, line in enumerate(invoice['Line']): # loop thorugh each line of the invoice
+                if line['DetailType'] == 'SalesItemLineDetail' and line['SalesItemLineDetail']['ItemRef']['name'] == 'Custom Sale': # check if the line is a custom sale
+                    print(f'Found custom sale at invoice #{invoice["DocNumber"]} line {index}')
+                    itemLocalDb = SQLiteController.queryItem(line["Description"]); # find and item wit
+                    if itemLocalDb:
+                        line[''] 
+                    else:
+                        print("item not found in local db");
+                    print();
+                break;
+        if (len(invoices) < maxResult):
+            break;
+        startPos += maxResult;
+        invoices = QBAutomation.__getInvoice(maxResult, startPos).json()['QueryResponse']['Invoice'];
+    return;
+
 SQLiteController.initialSetup();
-#updateChartOfAccount();
-#updateVendor();
-#updateProduct();
+updateChartOfAccount();
+updateVendor();
+updateProduct();
 createOrUpdateInvoice();
 #getLocation();
+#cleanupCustomSale();

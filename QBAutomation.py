@@ -267,6 +267,9 @@ def __getLocations():
     '''
     return __makeRequest("GET", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query', {'query': 'SELECT * FROM Department'}, {}).json();
 
+def __getInvoice(maxResult: int, startPos=0):
+    return __makeRequest("GET", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query', {'minorversion': 40, "query": f"SELECT * FROM Invoice MAXRESULTS {maxResult} STARTPOSITION {startPos}"}, {});
+
 def __pushVendor(vendor):
     '''
     create vendor for quickbook

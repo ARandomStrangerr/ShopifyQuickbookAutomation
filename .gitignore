@@ -5,3 +5,5 @@ venv
 Quickbook.db
 *.csv
 .DS_Store
+*.xlsx
+

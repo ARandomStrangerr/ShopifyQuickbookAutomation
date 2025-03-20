@@ -77,7 +77,7 @@ def queryVendor(vendorName):
 
 def updateItem(qbId, name):
     query = 'UPDATE items SET name=? WHERE qbId=?';
-    _cursor.execute(query, (name, qbId));
+    _cursor.execute(query, (name.lower(), qbId));
     _conn.commit();
 
 def updateChartOfAccount(id, name):
