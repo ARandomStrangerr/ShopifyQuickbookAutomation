@@ -5,6 +5,7 @@ import webbrowser;
 import socket;
 import time;
 import SQLiteController;
+from datetime import datetime;
 
 def __openOAuth():
     """
@@ -213,7 +214,7 @@ def __prepInvoiceToPush(order):
     for item in order['item']:
         totalTaxRate = 0;
         lineItem = {};
-        itemQuery = SQLiteController.queryItem(item['name']);
+        itemQuery = SQLiteController.queryItem(name=item['name']);
         if (itemQuery):
             vendorQuery = SQLiteController.queryVendor(item['vendor']);
         else:
@@ -259,7 +260,13 @@ def __pushInvoice(invoice):
     """
     send the given invoice to QB API
     """
-    return __makeRequest("POST", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/invoice',{}, invoice).json();
+    return __makeRequest("POST", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/invoice',{'minorversion': 75}, invoice).json();
+
+def __updateInvoice(invoice):
+    """
+    update a viven invoice
+    """
+    return __makeRequest("POST", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/invoice',{'minorversion': 75}, invoice).json();
 
 def __getLocations():
     '''
@@ -267,8 +274,15 @@ def __getLocations():
     '''
     return __makeRequest("GET", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query', {'query': 'SELECT * FROM Department'}, {}).json();
 
-def __getInvoice(maxResult: int, startPos=0):
-    return __makeRequest("GET", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query', {'minorversion': 40, "query": f"SELECT * FROM Invoice MAXRESULTS {maxResult} STARTPOSITION {startPos}"}, {});
+def __getInvoice(maxResult: int, startPos=0, date=datetime.now().strftime("%Y-%m-%dT%H")):
+    return __makeRequest("GET", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query', {'minorversion': 40, "query": f"SELECT * FROM Invoice WHERE TxnDate='{date}' MAXRESULTS {maxResult} STARTPOSITION {startPos}"}, {});
+
+def __getItem(itemName:str|None, maxResult = 10, startPos = 0):
+    baseQuery = "SELECT * FROM Item";
+    if itemName:
+        baseQuery += f" WHERE Name = '{itemName}'";
+    baseQuery += f" MAXRESULTS {maxResult} STARTPOSITION {startPos}";
+    return __makeRequest("GET", f'https://quickbooks.api.intuit.com/v3/company/{Trunk.data["qbCompanyId"]}/query', {"minorversion": 75, 'query': baseQuery}, {});
 
 def __pushVendor(vendor):
     '''

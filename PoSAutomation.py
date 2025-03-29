@@ -240,23 +240,3 @@ def getVendorName(startDate: str | None = None,cursor:str | None = None, limit=5
     for res in response['data']['products']['edges']:
         m[res['node']['vendor']] = 0;
     return list(m.keys()), cursor;
-
-def getNetSaleByDate(date:str):
-    query = f'''
-        {{
-            orders(first: 100, query: "processedAt:>={"date"}T00:00:00Z processedAt:<={"date"}T23:59:59Z") {{
-                edges {{
-                    node {{
-                        id
-                        processedAt
-                        totalNetAmount {{
-                            amount
-                            currencyCode
-                        }}
-                    }}
-                }}
-            }}
-        }}
-    '''
-    print(__makeRequest(query).json());
-    return;

@@ -1,3 +1,4 @@
+from sqlite3 import IntegrityError
 from requests import request
 import Trunk;
 import PoSAutomation;
@@ -60,15 +61,14 @@ def updateProduct():
                 # upload an item to QB
                 print(prod['Name']);
                 posId = product['variants'][idx]['id'];
-                localItem = SQLiteController.queryItemByPosId(posId);
+                localItem = SQLiteController.queryItem(posId=posId);
                 if localItem is None: # if the item is not found, then create a new item
                     response = QBAutomation.__pushProduct(prod);
+                    vendor = SQLiteController.queryVendor(product['vendor']);
                     try:
                         qbId = response['Item']['Id'];
                         print(f'Create new QB with ID = {qbId}');
-                        SQLiteController.insertItem(qbId, posId, prod['Name']);
-                        print('Create item in local database');
-                    except: # there is a chance that the db is deleted and the item is already on QB
+                    except Exception as e: # there is a chance that the db is deleted and the item is already on QB
                         # the pit fall here is when the item needed to be update but there is no local DB as reference, hence we upload a new item.
                         qbId = response['Fault']['Error'][0]['Detail'].split(":")[1].split("=")[1];
                         print(f'Already exsits in QB with ID = {qbId}, but not inside local DB');
@@ -76,8 +76,12 @@ def updateProduct():
                         prod['Id'] = qbId;
                         prod['SyncToken'] = QBAutomation.__getProductSyncToken(qbId);
                         print('Updated product on QB');
-                        SQLiteController.updateItem(qbId, prod['Name']);
+                    try:
+                        print(prod)
+                        SQLiteController.insertItem(qbId, posId, prod['Name'], vendor[0]);
                         print('Updated item on local BD');
+                    except IntegrityError:
+                        print(f'product {prod["Name"]} pos Id {posId} already exists {localItem} possible duplicates');
                 else: # if the item is found, then update the item in case something changes
                     # why do this?
                     # i am not going to waste the memory on my laptop for insiginificant down time in query.
@@ -87,7 +91,10 @@ def updateProduct():
                     prod['Id'] = localItem[0];
                     response = QBAutomation.__pushProduct(prod);
                     print("Updated product on QB");
-                    SQLiteController.updateItem(localItem[0], prod['Name']);
+                    try:
+                        SQLiteController.updateItem(localItem[0], prod['Name']);
+                    except Exception as e:
+                        print(e);
                     print('Updated item on local BD')
                 lastUpdatedItemTime = response['time'];
                 print();
@@ -118,7 +125,7 @@ def updateVendor():
         response = QBAutomation.__pushVendor(vendor).json();
         try: # extract the ID of an item if the item is already exsits
             qbId = response['Fault']['Error'][0]['Detail'].split(":")[1].split("=")[1];
-            print(f'{qbId} - {vendor}\nalready exsits');
+            print(f'{qbId} - {vendor}\nalready exsits on QB');
         except Exception:
             qbId = response['Class']['Id'];
             print(f'{qbId} - {vendor}\ncreated');
@@ -156,9 +163,9 @@ def createOrUpdateInvoice():
             invoice = QBAutomation.__prepInvoiceToPush(order);
             response = QBAutomation.__pushInvoice(invoice);
             try:
-                print(f"Successfully create invoice {response['Invoice']['Id']}");
+                print(f"Successfully create invoice {response['Invoice']['DocNumber']}");
             except Exception:
-                print(f'Invoice {response["Fault"]["Error"][0]["Detail"].split("=")[-1]} is already created');
+                print(f'Invoice {response["Fault"]["Error"][0]["Detail"].split("=")[-3].split(" ")[0]} is already created');
         if cursor is not None:
             orders, cursor = PoSAutomation.getOrderData(cursor=cursor);
         else:
@@ -175,30 +182,49 @@ def getLocation():
     print(QBAutomation.__getLocations());
 
 def cleanupCustomSale():
-    maxResult = 5; # the max number of invoice to fetch
+    maxResult = 50; # the max number of invoice to fetch
     startPos = 0; # current starting position when fetch
+    date = "2025-01-31";
     account = SQLiteController.queryAccountByName("Income Sale");
-    invoices = QBAutomation.__getInvoice(maxResult, startPos).json()['QueryResponse']['Invoice']; # the first 5 invoices
+    invoices = QBAutomation.__getInvoice(maxResult, startPos, date).json()['QueryResponse']['Invoice']; # the first 5 invoices
+
     while (True):
-        for invoice in invoices: # loop thorugh each invoice
-            for index, line in enumerate(invoice['Line']): # loop thorugh each line of the invoice
-                if line['DetailType'] == 'SalesItemLineDetail' and line['SalesItemLineDetail']['ItemRef']['name'] == 'Custom Sale': # check if the line is a custom sale
-                    print(f'Found custom sale at invoice #{invoice["DocNumber"]} line {index}')
-                    itemLocalDb = SQLiteController.queryItem(line["Description"]); # find and item wit
-                    if itemLocalDb:
-                        line[''] 
+        for invoice in invoices:
+            flag = False;
+            for line in invoice["Line"]:
+                if line['DetailType'] == 'SalesItemLineDetail' and line['SalesItemLineDetail']['ItemAccountRef']['value'] == '20':
+                    print(f'invoice {invoice["DocNumber"]} at line {line["LineNum"]}');
+                    item = SQLiteController.queryItem(name=line['Description']);
+                    if item is None:
+                        item = QBAutomation.__getItem(line['Description']).json();
+                        print(item);
+                        item = item['QueryResponse']['Item'][0];
+                        line['SalesItemLineDetail']['ItemRef']['value'] = item['Id'];
+                        line['SalesItemLineDetail']['ItemRef']['name'] = line['Description'];
+                        line['SalesItemLineDetail']['ItemAccountRef']['name'] = 'Income Sale';
+                        line['SalesItemLineDetail']['ItemAccountRef']['value'] = account[0];
                     else:
-                        print("item not found in local db");
-                    print();
-                break;
-        if (len(invoices) < maxResult):
+                        line['SalesItemLineDetail']['ItemRef']['value'] = item[0];
+                        line['SalesItemLineDetail']['ItemRef']['name'] = line['Description'];
+                        line['SalesItemLineDetail']['ItemAccountRef']['name'] = 'Income Sale';
+                        line['SalesItemLineDetail']['ItemAccountRef']['value'] = account[0];
+                        line['SalesItemLineDetail']['ClassRef']['value'] = item[2];
+                        del line['SalesItemLineDetail']['ClassRef']['name'];
+                    flag = True;
+            if flag:
+                response = QBAutomation.__pushInvoice(invoice);
+                print(f'Updated invoice');
+        if len(invoices) < maxResult:
             break;
         startPos += maxResult;
-        invoices = QBAutomation.__getInvoice(maxResult, startPos).json()['QueryResponse']['Invoice'];
+        try:
+            invoices = QBAutomation.__getInvoice(maxResult, startPos, date).json()['QueryResponse']['Invoice'];
+        except:
+            break;
     return;
 
 SQLiteController.initialSetup();
-updateChartOfAccount();
+#updateChartOfAccount();
 updateVendor();
 updateProduct();
 createOrUpdateInvoice();
